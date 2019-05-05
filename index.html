@@ -1,0 +1,233 @@
+<!doctype HTML>
+<html lang="en">
+<head>
+<title>Relation properties</title>
+<meta charset="utf-8" />
+<script src="https://cdn.jsdelivr.net/npm/vue"></script>
+
+<style>
+body {
+	max-width:800px;
+	margin:40px auto;
+}
+textarea {
+	border:1px black solid;
+	width:100%;
+	box-sizing:border-box;
+	font-size:18px;
+}
+#input-text {
+	margin-top:10px;
+}
+#output-text {
+	background-color:#f8f8f8;
+	font-family:helvetica;
+	padding:20px;
+	border:1px black solid;
+	line-height:1.8;
+}
+#intro-text {
+	margin-bottom:40px;
+}
+input[type=checkbox] {
+	transform:scale(1.5)
+}
+</style>
+
+</head>
+
+<body>
+<h1>
+Relation Properties
+</h1>
+<div id="app">
+<p id="intro-text">Input all pairs in relation. Currently only numeric pairs are supported.</p>
+<label for="autoReflexive">Include reflexive pairs implicitly?</label>
+<input type="checkbox" id="autoReflexive" v-model="autoReflexive">
+<textarea id="input-text" v-model="textinput" rows=5 cols=80></textarea><br>
+
+
+<div>
+<pre id="output-text">
+{{outputText}}
+</pre>
+</div>
+
+</div>
+</body>
+
+<script>
+let app = new Vue({
+	el:"#app",
+	data:{
+		textinput:"(1,1),(2,2),(3,3),\n(1,2),(2,3),(1,3)",
+		autoReflexive:false
+	},
+	computed:{
+		// parse text input to get set
+		asPairs:function() {
+			// grab the numbers in the pair
+			// in capturing groups
+			let regex = /\((\d+),(\d+)\)/g
+			let pairs = [];
+			let match = regex.exec(this.textinput);
+			while (match!=null) {
+				let firstNum = parseInt(match[1]);
+				let secondNum = parseInt(match[2]);
+				pairs.push([firstNum,secondNum]);
+				match = regex.exec(this.textinput);
+			}
+			return pairs;
+		},
+		// returns dict of all output for each a
+		asDict:function() {
+			let pairs = this.asPairs;
+			let dict = {}
+			for (let pair of pairs) {
+				if (dict[pair[0]]) {
+					dict[pair[0]].add(pair[1]);
+				}
+				else {
+					dict[pair[0]] = new Set([pair[1]]);
+					if (this.autoReflexive) {
+						dict[pair[0]].add(pair[0]);
+					}
+				}
+			}
+			return dict;
+		},
+		asSet:function() {
+			return new Set(this.asPairs);
+		},
+		outputText:function() {
+			let rtrn = "";
+
+			let reflexInfo = this.checkReflexivity();
+			let isReflexive = reflexInfo.rslt;
+
+			let symmetryInfo = this.checkSymmetry();
+			let isSymmetric = symmetryInfo.rslt;
+
+			let antisymmetryInfo = this.checkAntisymmetry();
+			let isAntisymmetric = antisymmetryInfo.rslt;
+
+			let transInfo = this.checkTransitivity();
+			let isTransitive = transInfo.rslt;
+
+			rtrn += reflexInfo.msg+"\n";
+			rtrn += symmetryInfo.msg+"\n";
+			rtrn += antisymmetryInfo.msg+"\n";
+			rtrn += transInfo.msg+"\n";
+			rtrn += "\n";
+			if (isReflexive && isSymmetric && isTransitive) {
+				rtrn+="From reflexivity, symmetry, and transitivity, ";
+				rtrn+="relation is an equivalence relation";
+			}
+			if (isReflexive && isAntisymmetric && isTransitive) {
+				rtrn+="\n";
+				rtrn+="From reflexivity, antisymmetry and transitivity, "
+				rtrn+="relation is a partial order relation";
+			}
+			return rtrn;
+		}
+	},
+	methods:{
+		// (a,a)
+		checkReflexivity:function() {
+			if (this.autoReflexive) {
+				return {
+					rslt:true,
+					msg:"Relation is reflexive because implicit option is enabled."
+				};
+			}
+			let dict = this.asDict;
+			for (let key in dict) {
+				let a = parseInt(key);
+				if (!dict[a].has(a)) {
+					return {
+						rslt:false,
+						msg:`Relation is not reflexive, as it does not contain the pair (${a},${a})`
+					};
+				}
+			}
+			return {
+				rslt:true,
+				msg:"Relation is reflexive"
+			};
+		},
+		// (a,b) and (b,a)
+		checkSymmetry:function() {
+			let dict = this.asDict;
+			for (let key in dict) {
+				let a = parseInt(key);
+				let set = dict[key];
+				for (let b of set) {
+					// if we have a,b but not b,a
+					if (!dict[b] || !dict[b].has(a)) {
+						return {
+							rslt:false,
+							msg:
+`Relation is not symmetric because it contains the pair `+
+`(${a},${b}), but not the pair (${b},${a})`
+						};
+					}
+				}
+			}
+			return {
+				rslt:true,
+				msg:"Relation is symmetric"
+			};
+		},
+		checkAntisymmetry:function() {
+			let dict = this.asDict;
+			for (let key in dict) {
+				let a = parseInt(key);
+				let set = dict[key];
+				for (let b of set) {
+					// if we have a,b but not b,a
+					if (dict[b] && a!=b && dict[b].has(a)) {
+						return {
+							rslt:false,
+							msg:
+`Relation is not antisymmetric because it contains `+
+`both the pairs (${a},${b}), and (${b},${a})`
+						};
+					}
+				}
+			}
+			return {
+				rslt:true,
+				msg:"Relation is antisymmetric"
+			};
+		},
+		// using (a,b),(b,c) -> (a,c)
+		checkTransitivity:function() {
+			let dict = this.asDict;
+			for (let key in dict) {
+				let a = parseInt(key);
+				let a_set = dict[key];
+				for (let b of a_set) {
+					if (!dict[b]) continue;
+					let b_set = dict[b];
+					for (let c of b_set) {
+						if (!a_set.has(c)) {
+							return {
+								rslt:false,
+								msg:
+`Relation is not transitive, as it contains the pairs `+
+`(${a},${b}) and (${b},${c}), but not the pair (${a},${c})`
+							};
+						}
+					}
+				}
+			}
+			return {
+				rslt:true,
+				msg:"Relation is transitive"
+			};
+		}
+	}
+});
+</script>
+
+</html>
